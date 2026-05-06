@@ -6,18 +6,23 @@ export default function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [countdown, setCountdown] = useState(null);
 
-  const startCamera = async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "environment" },
-      audio: false,
-    });
+  const CLOUD_NAME = "dcklzhxou";
+  const UPLOAD_PRESET = "360photoboot";
 
-    videoRef.current.srcObject = stream;
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+        audio: false,
+      });
+      videoRef.current.srcObject = stream;
+    } catch (err) {
+      alert("Error al abrir la cámara");
+    }
   };
 
   const startRecording = () => {
     const stream = videoRef.current.srcObject;
-
     if (!stream) return alert("Encendé la cámara");
 
     let count = 3;
@@ -25,7 +30,6 @@ export default function App() {
 
     const interval = setInterval(() => {
       count--;
-
       if (count === 0) {
         clearInterval(interval);
         setCountdown(null);
@@ -40,72 +44,40 @@ export default function App() {
     let chunks = [];
     const recorder = new MediaRecorder(stream);
 
-    recorder.ondataavailable = e => chunks.push(e.data);
-
+    recorder.ondataavailable = (e) => chunks.push(e.data);
     recorder.onstart = () => setIsRecording(true);
 
-    recorder.onstop = () => {
+    recorder.onstop = async () => {
       setIsRecording(false);
-      const blob = new Blob(chunks, { type: "video/mp4" });
-      const url = URL.createObjectURL(blob);
 
-      createBoomerang(url);
+      const blob = new Blob(chunks, { type: "video/mp4" });
+
+      const formData = new FormData();
+      formData.append("file", blob);
+      formData.append("upload_preset", UPLOAD_PRESET);
+
+      try {
+        const res = await fetch(
+          `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/video/upload`,
+          {
+            method: "POST",
+            body: formData,
+          }
+        );
+
+        const data = await res.json();
+
+        // 🔁 BOOMERANG REAL
+        const boomerangURL = `https://res.cloudinary.com/${CLOUD_NAME}/video/upload/e_loop:2/${data.public_id}.mp4`;
+
+        setVideoURL(boomerangURL);
+      } catch (err) {
+        alert("Error subiendo el video");
+      }
     };
 
     recorder.start();
-
     setTimeout(() => recorder.stop(), 10000);
-  };
-
-  // 🔁 CREAR BOOMERANG REAL
-  const createBoomerang = (src) => {
-    const video = document.createElement("video");
-    video.src = src;
-    video.muted = true;
-
-    video.onloadeddata = () => {
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d");
-
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-
-      const stream = canvas.captureStream(30);
-      const recorder = new MediaRecorder(stream);
-
-      let chunks = [];
-
-      recorder.ondataavailable = e => chunks.push(e.data);
-
-      recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: "video/mp4" });
-        const url = URL.createObjectURL(blob);
-        setVideoURL(url);
-      };
-
-      recorder.start();
-
-      let forward = true;
-
-      const draw = () => {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-        if (forward) {
-          video.currentTime += 0.03;
-          if (video.currentTime >= video.duration) forward = false;
-        } else {
-          video.currentTime -= 0.03;
-          if (video.currentTime <= 0) forward = true;
-        }
-
-        requestAnimationFrame(draw);
-      };
-
-      video.play();
-      draw();
-
-      setTimeout(() => recorder.stop(), 8000); // duración boomerang
-    };
   };
 
   return (
@@ -140,14 +112,14 @@ export default function App() {
 
       {videoURL && (
         <div>
-          <h3>Resultado Boomerang:</h3>
+          <h3>🎬 Boomerang listo:</h3>
 
           <video src={videoURL} controls width="300" />
 
           <br /><br />
 
-          <a href={videoURL} download="boomerang.mp4">
-            <button>⬇️ Descargar Boomerang</button>
+          <a href={videoURL} download>
+            <button>⬇️ Descargar video</button>
           </a>
         </div>
       )}
