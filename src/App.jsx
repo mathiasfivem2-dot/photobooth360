@@ -63,12 +63,16 @@ const startCamera = async () => {
       <button onClick={startCamera}>Encender cámara</button>
       <button onClick={startRecording}>Grabar 5s</button>
 
-      {videoURL && (
-        <div>
-          <h3>Vista previa:</h3>
-          <video src={videoURL} controls width="300" />
-        </div>
-      )}
-    </div>
-  );
-}
+{videoURL && (
+  <div>
+    <h3>Vista previa:</h3>
+
+    <video src={videoURL} controls width="300" />
+
+    <br /><br />
+
+    <a href={videoURL} download="video360.webm">
+      <button>⬇️ Descargar video</button>
+    </a>
+  </div>
+)}
