@@ -8,20 +8,33 @@ export default function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [countdown, setCountdown] = useState(null);
 
+  // 📸 CÁMARA (intenta 0.5x)
   const startCamera = async () => {
     try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = devices.filter(d => d.kind === "videoinput");
+
+      // intenta elegir cámara ultra wide
+      const ultraWide = videoDevices.find(d =>
+        d.label.toLowerCase().includes("ultra") ||
+        d.label.toLowerCase().includes("back")
+      );
+
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
+        video: ultraWide
+          ? { deviceId: { exact: ultraWide.deviceId } }
+          : { facingMode: "environment" },
         audio: true,
       });
 
       videoRef.current.srcObject = stream;
     } catch (err) {
       console.log(err);
-      alert("Error al acceder a la cámara. Usá Safari y HTTPS.");
+      alert("Error cámara. Probá en Safari.");
     }
   };
 
+  // ⏱️ CUENTA REGRESIVA
   const startRecording = () => {
     const stream = videoRef.current.srcObject;
 
@@ -46,60 +59,134 @@ export default function App() {
     }, 1000);
   };
 
+  // 🎥 GRABACIÓN 10 SEGUNDOS
   const recordVideo = (stream) => {
     let chunks = [];
 
     let options = {};
     if (MediaRecorder.isTypeSupported("video/mp4")) {
       options.mimeType = "video/mp4";
-    } else if (MediaRecorder.isTypeSupported("video/webm")) {
-      options.mimeType = "video/webm";
     }
 
     const mediaRecorder = new MediaRecorder(stream, options);
     mediaRecorderRef.current = mediaRecorder;
 
     mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) {
-        chunks.push(e.data);
-      }
+      if (e.data.size > 0) chunks.push(e.data);
     };
 
-    mediaRecorder.onstart = () => {
-      setIsRecording(true);
-    };
+    mediaRecorder.onstart = () => setIsRecording(true);
 
     mediaRecorder.onstop = () => {
       setIsRecording(false);
 
-      const blob = new Blob(chunks, {
-        type: options.mimeType || "video/mp4",
-      });
-
+      const blob = new Blob(chunks, { type: "video/mp4" });
       const url = URL.createObjectURL(blob);
-      setVideoURL(url);
+
+      createBoomerang(url);
     };
 
     mediaRecorder.start();
 
     setTimeout(() => {
       mediaRecorder.stop();
-    }, 5000);
+    }, 10000); // ⬅️ 10 segundos
+  };
+
+  // 🔁 BOOMERANG
+  const createBoomerang = (videoSrc) => {
+    const video = document.createElement("video");
+    video.src = videoSrc;
+
+    video.onloadeddata = () => {
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+
+      let frames = [];
+      let fps = 30;
+      let duration = video.duration;
+      let totalFrames = Math.floor(duration * fps);
+
+      let currentFrame = 0;
+
+      const captureFrame = () => {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        frames.push(canvas.toDataURL("image/jpeg"));
+
+        currentFrame++;
+
+        if (currentFrame < totalFrames) {
+          video.currentTime = currentFrame / fps;
+        } else {
+          generateBoomerang(frames);
+        }
+      };
+
+      video.addEventListener("seeked", captureFrame);
+
+      video.currentTime = 0;
+    };
+  };
+
+  const generateBoomerang = (frames) => {
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+
+    const img = new Image();
+    img.src = frames[0];
+
+    img.onload = () => {
+      canvas.width = img.width;
+      canvas.height = img.height;
+
+      let allFrames = [...frames, ...frames.reverse()];
+
+      let i = 0;
+
+      const stream = canvas.captureStream(30);
+      const recorder = new MediaRecorder(stream);
+
+      let chunks = [];
+
+      recorder.ondataavailable = (e) => chunks.push(e.data);
+
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: "video/mp4" });
+        const url = URL.createObjectURL(blob);
+        setVideoURL(url);
+      };
+
+      recorder.start();
+
+      const draw = () => {
+        if (i >= allFrames.length) {
+          recorder.stop();
+          return;
+        }
+
+        const frameImg = new Image();
+        frameImg.src = allFrames[i];
+
+        frameImg.onload = () => {
+          ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
+          i++;
+          setTimeout(draw, 30);
+        };
+      };
+
+      draw();
+    };
   };
 
   return (
     <div style={{ textAlign: "center", padding: "20px" }}>
-      <h1>📸 PhotoBooth 360</h1>
+      <h1>📸 PhotoBooth 360 PRO</h1>
 
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        width="300"
-        style={{ borderRadius: "10px" }}
-      />
+      <video ref={videoRef} autoPlay playsInline width="300" />
 
-      {/* CONTADOR */}
       {countdown && (
         <h1 style={{ fontSize: "60px", color: "red" }}>
           {countdown}
@@ -118,27 +205,26 @@ export default function App() {
         onClick={startRecording}
         disabled={isRecording}
         style={{
-          padding: "15px 30px",
+          padding: "15px",
           fontSize: "18px",
-          backgroundColor: isRecording ? "gray" : "red",
+          backgroundColor: "red",
           color: "white",
-          border: "none",
           borderRadius: "10px"
         }}
       >
-        {isRecording ? "🎥 Grabando..." : "🔴 Iniciar grabación"}
+        {isRecording ? "🎥 Grabando..." : "🔴 Grabar Boomerang"}
       </button>
 
       {videoURL && (
         <div>
-          <h3>Vista previa:</h3>
+          <h3>Resultado:</h3>
 
           <video src={videoURL} controls width="300" />
 
           <br /><br />
 
-          <a href={videoURL} download="video360.mp4">
-            <button>⬇️ Descargar video</button>
+          <a href={videoURL} download="boomerang.mp4">
+            <button>⬇️ Descargar</button>
           </a>
         </div>
       )}
