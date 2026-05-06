@@ -10,7 +10,7 @@ export default function App() {
   const CLOUD_NAME = "dcklzhxou";
   const UPLOAD_PRESET = "360photoboot";
 
-  // 📸 CÁMARA OPTIMIZADA iPHONE
+  // 📸 CÁMARA (optimizada iPhone)
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -49,7 +49,7 @@ export default function App() {
     }, 1000);
   };
 
-  // 🎥 GRABACIÓN CORREGIDA (NO VIDEO NEGRO)
+  // 🎥 GRABACIÓN (fix iPhone)
   const record = (stream) => {
     let chunks = [];
 
@@ -73,7 +73,7 @@ export default function App() {
       setIsRecording(false);
 
       if (chunks.length === 0) {
-        alert("No se grabó video (limitación de iPhone)");
+        alert("No se grabó video");
         return;
       }
 
@@ -94,8 +94,8 @@ export default function App() {
 
         const data = await res.json();
 
-        // 🔁 BOOMERANG REAL
-        const boomerangURL = `https://res.cloudinary.com/${CLOUD_NAME}/video/upload/e_loop:2/${data.public_id}.mp4`;
+        // 🔥 BOOMERANG COMPATIBLE iPHONE
+        const boomerangURL = `https://res.cloudinary.com/${CLOUD_NAME}/video/upload/f_mp4,vc_h264,e_loop:2/${data.public_id}.mp4`;
 
         setVideoURL(boomerangURL);
       } catch (err) {
@@ -103,7 +103,7 @@ export default function App() {
       }
     };
 
-    recorder.start(100); // 👈 evita video negro en iPhone
+    recorder.start(100); // importante para iPhone
 
     setTimeout(() => recorder.stop(), 10000); // 10 segundos
   };
