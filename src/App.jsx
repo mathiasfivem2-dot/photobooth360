@@ -3,161 +3,140 @@ import { useRef, useState } from "react";
 export default function App() {
   const videoRef = useRef(null);
 
+  const [images, setImages] = useState([]);
   const [videoURL, setVideoURL] = useState(null);
-  const [isRecording, setIsRecording] = useState(false);
   const [countdown, setCountdown] = useState(null);
+  const [capturing, setCapturing] = useState(false);
 
   const CLOUD_NAME = "dcklzhxou";
   const UPLOAD_PRESET = "360photoboot";
 
-  // 📸 CÁMARA (optimizada iPhone)
+  // 📸 cámara
   const startCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: "environment",
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-        audio: false,
-      });
-
-      videoRef.current.srcObject = stream;
-    } catch (err) {
-      alert("Error al acceder a la cámara");
-    }
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment" },
+      audio: false
+    });
+    videoRef.current.srcObject = stream;
   };
 
-  // ⏱️ CUENTA REGRESIVA
-  const startRecording = () => {
-    const stream = videoRef.current.srcObject;
-    if (!stream) return alert("Encendé la cámara");
-
+  // ⏱️ countdown
+  const startCapture = () => {
     let count = 3;
     setCountdown(count);
 
     const interval = setInterval(() => {
       count--;
-
       if (count === 0) {
         clearInterval(interval);
         setCountdown(null);
-        record(stream);
+        captureFrames();
       } else {
         setCountdown(count);
       }
     }, 1000);
   };
 
-  // 🎥 GRABACIÓN (fix iPhone)
-  const record = (stream) => {
-    let chunks = [];
+  // 📷 capturar fotos
+  const captureFrames = () => {
+    setCapturing(true);
 
-    let options = {};
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
 
-    if (MediaRecorder.isTypeSupported("video/webm;codecs=vp8")) {
-      options.mimeType = "video/webm;codecs=vp8";
-    } else if (MediaRecorder.isTypeSupported("video/mp4")) {
-      options.mimeType = "video/mp4";
-    }
+    const video = videoRef.current;
 
-    const recorder = new MediaRecorder(stream, options);
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
 
-    recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) chunks.push(e.data);
-    };
+    let frames = [];
+    let total = 30; // cantidad de fotos
 
-    recorder.onstart = () => setIsRecording(true);
+    let i = 0;
 
-    recorder.onstop = async () => {
-      setIsRecording(false);
+    const interval = setInterval(() => {
+      ctx.drawImage(video, 0, 0);
+      frames.push(canvas.toDataURL("image/jpeg"));
 
-      if (chunks.length === 0) {
-        alert("No se grabó video");
-        return;
+      i++;
+
+      if (i >= total) {
+        clearInterval(interval);
+        setCapturing(false);
+        uploadFrames(frames);
       }
+    }, 100); // velocidad
+  };
 
-      const blob = new Blob(chunks, { type: options.mimeType });
+  // ☁️ subir imágenes
+  const uploadFrames = async (frames) => {
+    try {
+      let uploaded = [];
 
-      const formData = new FormData();
-      formData.append("file", blob);
-      formData.append("upload_preset", UPLOAD_PRESET);
+      for (let img of frames) {
+        const res = await fetch(img);
+        const blob = await res.blob();
 
-      try {
-        const res = await fetch(
-          `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/video/upload`,
+        const formData = new FormData();
+        formData.append("file", blob);
+        formData.append("upload_preset", UPLOAD_PRESET);
+
+        const upload = await fetch(
+          `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
           {
             method: "POST",
-            body: formData,
+            body: formData
           }
         );
 
-        const data = await res.json();
-
-        // 🔥 BOOMERANG COMPATIBLE iPHONE
-        const boomerangURL = `https://res.cloudinary.com/${CLOUD_NAME}/video/upload/f_mp4,vc_h264,e_loop:2/${data.public_id}.mp4`;
-
-        setVideoURL(boomerangURL);
-      } catch (err) {
-        alert("Error subiendo el video");
+        const data = await upload.json();
+        uploaded.push(data.public_id);
       }
-    };
 
-    recorder.start(100); // importante para iPhone
+      // 🎥 generar video boomerang
+      const base = uploaded[0];
 
-    setTimeout(() => recorder.stop(), 10000); // 10 segundos
+      const video = `https://res.cloudinary.com/${CLOUD_NAME}/video/upload/fl_splice,l_${uploaded
+        .join("/")}/fl_layer_apply,e_loop:2,f_mp4,vc_h264/${base}.mp4`;
+
+      setVideoURL(video);
+    } catch (err) {
+      alert("Error generando video");
+    }
   };
 
   return (
     <div style={{ textAlign: "center", padding: "20px" }}>
       <h1>📸 PhotoBooth 360 PRO</h1>
 
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        width="300"
-        style={{ borderRadius: "10px" }}
-      />
+      <video ref={videoRef} autoPlay playsInline width="300" />
 
       {countdown && (
-        <h1 style={{ fontSize: "60px", color: "red" }}>
-          {countdown}
-        </h1>
+        <h1 style={{ fontSize: "60px", color: "red" }}>{countdown}</h1>
       )}
 
-      <br /><br />
-
-      <button onClick={startCamera}>
-        Encender cámara
-      </button>
+      {capturing && <h2>📷 Capturando...</h2>}
 
       <br /><br />
 
-      <button
-        onClick={startRecording}
-        disabled={isRecording}
-        style={{
-          padding: "15px",
-          fontSize: "18px",
-          backgroundColor: "red",
-          color: "white",
-          borderRadius: "10px"
-        }}
-      >
-        {isRecording ? "🎥 Grabando..." : "🔴 Grabar Boomerang"}
+      <button onClick={startCamera}>Encender cámara</button>
+
+      <br /><br />
+
+      <button onClick={startCapture}>
+        🔴 Crear Boomerang
       </button>
 
       {videoURL && (
         <div>
-          <h3>🎬 Boomerang listo:</h3>
+          <h3>🎬 Resultado:</h3>
 
           <video src={videoURL} controls width="300" />
 
           <br /><br />
 
           <a href={videoURL} download>
-            <button>⬇️ Descargar video</button>
+            <button>⬇️ Descargar</button>
           </a>
         </div>
       )}
