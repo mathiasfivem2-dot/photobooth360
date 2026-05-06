@@ -7,39 +7,26 @@ export default function App() {
   const [videoURL, setVideoURL] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
   const [countdown, setCountdown] = useState(null);
+  const [playReverse, setPlayReverse] = useState(false);
 
-  // 📸 CÁMARA (intenta 0.5x)
   const startCamera = async () => {
     try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const videoDevices = devices.filter(d => d.kind === "videoinput");
-
-      // intenta elegir cámara ultra wide
-      const ultraWide = videoDevices.find(d =>
-        d.label.toLowerCase().includes("ultra") ||
-        d.label.toLowerCase().includes("back")
-      );
-
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: ultraWide
-          ? { deviceId: { exact: ultraWide.deviceId } }
-          : { facingMode: "environment" },
+        video: { facingMode: "environment" },
         audio: true,
       });
 
       videoRef.current.srcObject = stream;
     } catch (err) {
-      console.log(err);
-      alert("Error cámara. Probá en Safari.");
+      alert("Error cámara. Usá Safari.");
     }
   };
 
-  // ⏱️ CUENTA REGRESIVA
   const startRecording = () => {
     const stream = videoRef.current.srcObject;
 
     if (!stream) {
-      alert("Primero encendé la cámara");
+      alert("Encendé la cámara primero");
       return;
     }
 
@@ -59,16 +46,10 @@ export default function App() {
     }, 1000);
   };
 
-  // 🎥 GRABACIÓN 10 SEGUNDOS
   const recordVideo = (stream) => {
     let chunks = [];
 
-    let options = {};
-    if (MediaRecorder.isTypeSupported("video/mp4")) {
-      options.mimeType = "video/mp4";
-    }
-
-    const mediaRecorder = new MediaRecorder(stream, options);
+    const mediaRecorder = new MediaRecorder(stream);
     mediaRecorderRef.current = mediaRecorder;
 
     mediaRecorder.ondataavailable = (e) => {
@@ -82,108 +63,30 @@ export default function App() {
 
       const blob = new Blob(chunks, { type: "video/mp4" });
       const url = URL.createObjectURL(blob);
+      setVideoURL(url);
 
-      createBoomerang(url);
+      startBoomerangEffect();
     };
 
     mediaRecorder.start();
 
     setTimeout(() => {
       mediaRecorder.stop();
-    }, 10000); // ⬅️ 10 segundos
+    }, 10000); // 10 segundos
   };
 
-  // 🔁 BOOMERANG
-  const createBoomerang = (videoSrc) => {
-    const video = document.createElement("video");
-    video.src = videoSrc;
+  // 🔁 BOOMERANG SIMPLE (reproducción ida/vuelta)
+  const startBoomerangEffect = () => {
+    setPlayReverse(false);
 
-    video.onloadeddata = () => {
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d");
-
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-
-      let frames = [];
-      let fps = 30;
-      let duration = video.duration;
-      let totalFrames = Math.floor(duration * fps);
-
-      let currentFrame = 0;
-
-      const captureFrame = () => {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        frames.push(canvas.toDataURL("image/jpeg"));
-
-        currentFrame++;
-
-        if (currentFrame < totalFrames) {
-          video.currentTime = currentFrame / fps;
-        } else {
-          generateBoomerang(frames);
-        }
-      };
-
-      video.addEventListener("seeked", captureFrame);
-
-      video.currentTime = 0;
-    };
-  };
-
-  const generateBoomerang = (frames) => {
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
-
-    const img = new Image();
-    img.src = frames[0];
-
-    img.onload = () => {
-      canvas.width = img.width;
-      canvas.height = img.height;
-
-      let allFrames = [...frames, ...frames.reverse()];
-
-      let i = 0;
-
-      const stream = canvas.captureStream(30);
-      const recorder = new MediaRecorder(stream);
-
-      let chunks = [];
-
-      recorder.ondataavailable = (e) => chunks.push(e.data);
-
-      recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: "video/mp4" });
-        const url = URL.createObjectURL(blob);
-        setVideoURL(url);
-      };
-
-      recorder.start();
-
-      const draw = () => {
-        if (i >= allFrames.length) {
-          recorder.stop();
-          return;
-        }
-
-        const frameImg = new Image();
-        frameImg.src = allFrames[i];
-
-        frameImg.onload = () => {
-          ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
-          i++;
-          setTimeout(draw, 30);
-        };
-      };
-
-      draw();
-    };
+    setInterval(() => {
+      setPlayReverse(prev => !prev);
+    }, 2000);
   };
 
   return (
     <div style={{ textAlign: "center", padding: "20px" }}>
-      <h1>📸 PhotoBooth 360 PRO</h1>
+      <h1>📸 PhotoBooth 360</h1>
 
       <video ref={videoRef} autoPlay playsInline width="300" />
 
@@ -212,19 +115,28 @@ export default function App() {
           borderRadius: "10px"
         }}
       >
-        {isRecording ? "🎥 Grabando..." : "🔴 Grabar Boomerang"}
+        {isRecording ? "🎥 Grabando..." : "🔴 Grabar 10s"}
       </button>
 
       {videoURL && (
         <div>
-          <h3>Resultado:</h3>
+          <h3>Vista previa (boomerang):</h3>
 
-          <video src={videoURL} controls width="300" />
+          <video
+            src={videoURL}
+            width="300"
+            autoPlay
+            loop
+            controls
+            style={{
+              transform: playReverse ? "scaleX(-1)" : "scaleX(1)"
+            }}
+          />
 
           <br /><br />
 
-          <a href={videoURL} download="boomerang.mp4">
-            <button>⬇️ Descargar</button>
+          <a href={videoURL} download="video360.mp4">
+            <button>⬇️ Descargar video</button>
           </a>
         </div>
       )}
